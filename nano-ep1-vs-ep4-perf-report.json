@@ -1,0 +1,75 @@
+{
+  "candidate": "nano-ep4-perf",
+  "candidate_ep_profile": null,
+  "candidate_metrics": {
+    "decode": {
+      "seconds": 98.91121084243059,
+      "steps": 127,
+      "tokens": 12700,
+      "tokens_per_second": 128.39798332093613
+    },
+    "engine_init_seconds": 96.37691759318113,
+    "generation_seconds": 104.94261579960585,
+    "input_throughput_tps": 361.3308064705437,
+    "input_tokens": 37919,
+    "num_requests": 100,
+    "output_throughput_tps": 121.97142126171468,
+    "output_tokens": 12800,
+    "prefill": {
+      "seconds": 6.026241488754749,
+      "steps": 3,
+      "tokens": 37919,
+      "tokens_per_second": 6292.313388163857
+    },
+    "request_completion_latency": {
+      "max_ms": 104942.60945916176,
+      "mean_ms": 104942.58766330779,
+      "p50_ms": 104942.59092584252,
+      "p90_ms": 104942.60682910681,
+      "p99_ms": 104942.60917887092
+    },
+    "request_throughput_rps": 0.952901728607146,
+    "total_throughput_tps": 483.30222773225836
+  },
+  "reference": "nano-ep1-perf",
+  "reference_ep_profile": null,
+  "reference_metrics": {
+    "decode": {
+      "seconds": 343.79680571705103,
+      "steps": 127,
+      "tokens": 12700,
+      "tokens_per_second": 36.940424660176326
+    },
+    "engine_init_seconds": 61.591228909790516,
+    "generation_seconds": 356.1295889914036,
+    "input_throughput_tps": 106.4752864466853,
+    "input_tokens": 37919,
+    "num_requests": 100,
+    "output_throughput_tps": 35.94197279774181,
+    "output_tokens": 12800,
+    "prefill": {
+      "seconds": 12.327085696160793,
+      "steps": 3,
+      "tokens": 37919,
+      "tokens_per_second": 3076.07174433854
+    },
+    "request_completion_latency": {
+      "max_ms": 356129.58186119795,
+      "mean_ms": 356129.5570413023,
+      "p50_ms": 356129.5612938702,
+      "p90_ms": 356129.5785985887,
+      "p99_ms": 356129.581079334
+    },
+    "request_throughput_rps": 0.2807966624823579,
+    "total_throughput_tps": 142.4172592444271
+  },
+  "schema_version": 1,
+  "speedups": {
+    "generation_time": 3.393565009580609,
+    "input_throughput_tps": 3.393565009580609,
+    "output_throughput_tps": 3.393565009580609,
+    "request_throughput_rps": 3.393565009580609,
+    "total_throughput_tps": 3.3935650095806094
+  },
+  "warnings": []
+}
