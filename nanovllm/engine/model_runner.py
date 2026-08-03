@@ -10,6 +10,7 @@ from nanovllm.models.qwen3 import Qwen3ForCausalLM
 from nanovllm.layers.sampler import Sampler
 from nanovllm.utils.context import set_context, get_context, reset_context
 from nanovllm.utils.loader import load_model
+from nanovllm.utils.parallel_state import initialize_parallel_state
 
 
 class ModelRunner:
@@ -18,12 +19,22 @@ class ModelRunner:
         self.config = config
         hf_config = config.hf_config
         self.block_size = config.kvcache_block_size
-        self.enforce_eager = config.enforce_eager
-        self.world_size = config.tensor_parallel_size
+        # The dynamic token-to-expert dispatch used by Qwen3 MoE cannot be
+        # captured by CUDA graphs.
+        self.enforce_eager = config.enforce_eager or getattr(hf_config, "num_experts", 0) > 0
+        self.world_size = max(
+            config.tensor_parallel_size, config.expert_parallel_size
+        )
         self.rank = rank
         self.event = event
 
         dist.init_process_group("nccl", "tcp://localhost:2333", world_size=self.world_size, rank=rank)
+        initialize_parallel_state(
+            config.tensor_parallel_size,
+            rank if config.tensor_parallel_size > 1 else 0,
+            config.expert_parallel_size,
+            rank if config.expert_parallel_size > 1 else 0,
+        )
         torch.cuda.set_device(rank)
         default_dtype = torch.get_default_dtype()
         torch.set_default_dtype(hf_config.dtype)
@@ -35,6 +46,7 @@ class ModelRunner:
         self.allocate_kv_cache()
         if not self.enforce_eager:
             self.capture_cudagraph()
+        self.reset_profile_stats()
         torch.set_default_device("cpu")
         torch.set_default_dtype(default_dtype)
 
@@ -88,6 +100,36 @@ class ModelRunner:
         method = getattr(self, method_name, None)
         return method(*args)
 
+    def reset_profile_stats(self):
+        for module in self.model.modules():
+            reset = getattr(module, "reset_profile_stats", None)
+            if reset is not None:
+                reset()
+        torch.cuda.reset_peak_memory_stats()
+
+    def get_profile_stats(self):
+        torch.cuda.synchronize()
+        layers = []
+        if self.config.enable_ep_profiling:
+            for module in self.model.modules():
+                get_stats = getattr(module, "get_profile_stats", None)
+                if get_stats is not None:
+                    layers.append(get_stats())
+        local = {
+            "rank": self.rank,
+            "gpu": torch.cuda.get_device_name(self.rank),
+            "peak_memory_allocated_bytes": torch.cuda.max_memory_allocated(),
+            "peak_memory_reserved_bytes": torch.cuda.max_memory_reserved(),
+            "layers": layers,
+        }
+        if self.world_size == 1:
+            return {"enabled": self.config.enable_ep_profiling, "ranks": [local]}
+        gathered = [None] * self.world_size if self.rank == 0 else None
+        dist.gather_object(local, gathered, dst=0)
+        if self.rank == 0:
+            return {"enabled": self.config.enable_ep_profiling, "ranks": gathered}
+        return None
+
     def warmup_model(self):
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
@@ -107,7 +149,7 @@ class ModelRunner:
         used = total - free
         peak = torch.cuda.memory_stats()["allocated_bytes.all.peak"]
         current = torch.cuda.memory_stats()["allocated_bytes.all.current"]
-        num_kv_heads = hf_config.num_key_value_heads // self.world_size
+        num_kv_heads = hf_config.num_key_value_heads // config.tensor_parallel_size
         head_dim = getattr(hf_config, "head_dim", hf_config.hidden_size // hf_config.num_attention_heads)
         block_bytes = 2 * hf_config.num_hidden_layers * self.block_size * num_kv_heads * head_dim * hf_config.dtype.itemsize
         config.num_kvcache_blocks = int(total * config.gpu_memory_utilization - used - peak + current) // block_bytes
@@ -215,7 +257,13 @@ class ModelRunner:
         input_ids, positions = self.prepare_prefill(seqs) if is_prefill else self.prepare_decode(seqs)
         temperatures = self.prepare_sample(seqs) if self.rank == 0 else None
         logits = self.run_model(input_ids, positions, is_prefill)
-        token_ids = self.sampler(logits, temperatures).tolist() if self.rank == 0 else None
+        if self.rank == 0:
+            if all(seq.temperature == 0 for seq in seqs):
+                token_ids = logits.argmax(dim=-1).tolist()
+            else:
+                token_ids = self.sampler(logits, temperatures).tolist()
+        else:
+            token_ids = None
         reset_context()
         return token_ids
 

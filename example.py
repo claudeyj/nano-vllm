@@ -4,9 +4,13 @@ from transformers import AutoTokenizer
 
 
 def main():
-    path = os.path.expanduser("~/huggingface/Qwen3-0.6B/")
+    # path = "/weiz-gpfs/workspace/junyang/huggingface/Qwen3-0.6B/"
+    path = "/weiz-gpfs/workspace/junyang/huggingface/Qwen3-30B-A3B/"
     tokenizer = AutoTokenizer.from_pretrained(path)
-    llm = LLM(path, enforce_eager=True, tensor_parallel_size=1)
+    llm = LLM(path, enforce_eager=True, expert_parallel_size=8, enable_expert_parallel=True)
+
+    # import sys
+    # sys.exit(0)
 
     sampling_params = SamplingParams(temperature=0.6, max_tokens=256)
     prompts = [

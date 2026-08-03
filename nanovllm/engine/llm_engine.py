@@ -22,7 +22,8 @@ class LLMEngine:
         self.ps = []
         self.events = []
         ctx = mp.get_context("spawn")
-        for i in range(1, config.tensor_parallel_size):
+        world_size = max(config.tensor_parallel_size, config.expert_parallel_size)
+        for i in range(1, world_size):
             event = ctx.Event()
             process = ctx.Process(target=ModelRunner, args=(config, i, event))
             process.start()
@@ -70,21 +71,58 @@ class LLMEngine:
             self.add_request(prompt, sp)
         outputs = {}
         prefill_throughput = decode_throughput = 0.
+        generation_start = perf_counter()
+        prefill_seconds = decode_seconds = 0.0
+        prefill_tokens = decode_tokens = 0
+        prefill_steps = decode_steps = 0
+        completion_seconds = {}
         while not self.is_finished():
             t = perf_counter()
             output, num_tokens = self.step()
+            step_seconds = perf_counter() - t
             if num_tokens > 0:
-                prefill_throughput = num_tokens / (perf_counter() - t)
+                prefill_steps += 1
+                prefill_tokens += num_tokens
+                prefill_seconds += step_seconds
+                prefill_throughput = num_tokens / step_seconds
             else:
-                decode_throughput = -num_tokens / (perf_counter() - t)
+                decode_steps += 1
+                decode_tokens -= num_tokens
+                decode_seconds += step_seconds
+                decode_throughput = -num_tokens / step_seconds
             pbar.set_postfix({
                 "Prefill": f"{int(prefill_throughput)}tok/s",
                 "Decode": f"{int(decode_throughput)}tok/s",
             })
             for seq_id, token_ids in output:
                 outputs[seq_id] = token_ids
+                completion_seconds[seq_id] = perf_counter() - generation_start
                 pbar.update(1)
         pbar.close()
+        generation_seconds = perf_counter() - generation_start
+        self.last_generation_stats = {
+            "generation_seconds": generation_seconds,
+            "prefill": {
+                "steps": prefill_steps,
+                "tokens": prefill_tokens,
+                "seconds": prefill_seconds,
+                "tokens_per_second": (
+                    prefill_tokens / prefill_seconds if prefill_seconds else 0.0
+                ),
+            },
+            "decode": {
+                "steps": decode_steps,
+                "tokens": decode_tokens,
+                "seconds": decode_seconds,
+                "tokens_per_second": (
+                    decode_tokens / decode_seconds if decode_seconds else 0.0
+                ),
+            },
+            "completion_seconds": [
+                completion_seconds[seq_id]
+                for seq_id in sorted(completion_seconds)
+            ],
+        }
         outputs = [outputs[seq_id] for seq_id in sorted(outputs.keys())]
         outputs = [{"text": self.tokenizer.decode(token_ids), "token_ids": token_ids} for token_ids in outputs]
         return outputs

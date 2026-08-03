@@ -43,6 +43,31 @@ outputs = llm.generate(prompts, sampling_params)
 outputs[0]["text"]
 ```
 
+For Qwen3 MoE models, experts can be partitioned over the tensor-parallel ranks:
+
+```python
+llm = LLM(
+    "/YOUR/QWEN3-MOE/PATH",
+    expert_parallel_size=4,
+    enforce_eager=True,
+)
+```
+
+The number of experts must be divisible by `expert_parallel_size`. Tokens are
+dispatched to expert owners with all-to-all collectives. Combining expert and
+tensor parallelism is not currently supported.
+
+For differential correctness tests, pass `enable_ordered_expert_sum=True` to
+accumulate expert contributions in global expert-index order using FP32. This
+option is disabled by default because it adds synchronization, communication,
+and accumulation overhead; leave it disabled for production and performance
+benchmarks. Enable it for every implementation being compared.
+
+Set `enable_ep_profiling=True` only for instrumented benchmark runs. It records
+CUDA-event phase timings and routing counters for neval's `--profile-ep` mode.
+Leave it disabled for ordinary throughput measurements to avoid profiler
+overhead.
+
 ## Benchmark
 
 See `bench.py` for benchmark.
