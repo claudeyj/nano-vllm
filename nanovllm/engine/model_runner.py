@@ -15,7 +15,13 @@ from nanovllm.utils.parallel_state import initialize_parallel_state
 
 class ModelRunner:
 
-    def __init__(self, config: Config, rank: int, event: Event | list[Event]):
+    def __init__(
+        self,
+        config: Config,
+        rank: int,
+        event: Event | list[Event],
+        shm_name: str | None = None,
+    ):
         self.config = config
         hf_config = config.hf_config
         self.block_size = config.kvcache_block_size
@@ -51,12 +57,13 @@ class ModelRunner:
         torch.set_default_dtype(default_dtype)
 
         if self.world_size > 1:
+            assert shm_name is not None
             if rank == 0:
-                self.shm = SharedMemory(name="nanovllm", create=True, size=2**20)
+                self.shm = SharedMemory(name=shm_name, create=True, size=2**20)
                 dist.barrier()
             else:
                 dist.barrier()
-                self.shm = SharedMemory(name="nanovllm")
+                self.shm = SharedMemory(name=shm_name)
                 self.loop()
 
     def exit(self):
@@ -64,7 +71,10 @@ class ModelRunner:
             self.shm.close()
             dist.barrier()
             if self.rank == 0:
-                self.shm.unlink()
+                try:
+                    self.shm.unlink()
+                except FileNotFoundError:
+                    pass
         if not self.enforce_eager:
             del self.graphs, self.graph_pool
         torch.cuda.synchronize()

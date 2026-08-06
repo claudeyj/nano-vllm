@@ -1,6 +1,7 @@
 import atexit
 from dataclasses import fields
 from time import perf_counter
+from uuid import uuid4
 from tqdm.auto import tqdm
 from transformers import AutoTokenizer
 import torch.multiprocessing as mp
@@ -10,6 +11,10 @@ from nanovllm.sampling_params import SamplingParams
 from nanovllm.engine.sequence import Sequence
 from nanovllm.engine.scheduler import Scheduler
 from nanovllm.engine.model_runner import ModelRunner
+
+
+def _new_shm_name() -> str:
+    return f"nanovllm_{uuid4().hex}"
 
 
 class LLMEngine:
@@ -23,13 +28,16 @@ class LLMEngine:
         self.events = []
         ctx = mp.get_context("spawn")
         world_size = max(config.tensor_parallel_size, config.expert_parallel_size)
+        shm_name = _new_shm_name() if world_size > 1 else None
         for i in range(1, world_size):
             event = ctx.Event()
-            process = ctx.Process(target=ModelRunner, args=(config, i, event))
+            process = ctx.Process(
+                target=ModelRunner, args=(config, i, event, shm_name)
+            )
             process.start()
             self.ps.append(process)
             self.events.append(event)
-        self.model_runner = ModelRunner(config, 0, self.events)
+        self.model_runner = ModelRunner(config, 0, self.events, shm_name)
         self.tokenizer = AutoTokenizer.from_pretrained(config.model, use_fast=True)
         config.eos = self.tokenizer.eos_token_id
         self.scheduler = Scheduler(config)

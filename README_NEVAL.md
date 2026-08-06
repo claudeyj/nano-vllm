@@ -42,12 +42,17 @@ declare -A ENGINE_CONFIGS=(
 )
 
 for config_name in ep1 tp4 ep4 ep8; do
+  engine_args="${ENGINE_CONFIGS[$config_name]-}"
+  if [[ -z "${engine_args}" ]]; then
+    echo "Missing ENGINE_CONFIGS entry for ${config_name}" >&2
+    exit 1
+  fi
   uv run --project nano-vllm --with-editable ./neval neval profile \
     --backend nanovllm --name "nano-${config_name}-perf" \
     --model "${MODEL_PATH}" \
     --benchmark sharegpt --dataset "${DATASET_PATH}" \
     --num-prompts 10 --output "nano-${config_name}-perf.json" \
-    --engine-args "${ENGINE_CONFIGS[$config_name]}" \
+    --engine-args "${engine_args}" \
     --sampling-args '{"temperature":0,"max_tokens":128,"ignore_eos":true}'
 done
 ```
