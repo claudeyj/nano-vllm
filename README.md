@@ -68,6 +68,12 @@ CUDA-event phase timings and routing counters for neval's `--profile-ep` mode.
 Leave it disabled for ordinary throughput measurements to avoid profiler
 overhead.
 
+Optional kernels can be installed through the `nanovllm.kernel_plugins` entry
+point. The bundled integration under `plugins/vllm-a100-moe` runs
+Qwen3-30B-A3B experts with vLLM's Triton fused-MoE kernel on A100. Install that
+package and pass `moe_kernel_plugin="vllm_a100_moe"`; see the plugin README for
+setup and limitations.
+
 ## Benchmark
 
 See `bench.py` for benchmark.

@@ -16,6 +16,7 @@ from nanovllm.layers.linear import (
 from nanovllm.layers.rotary_embedding import get_rope
 from nanovllm.layers.embed_head import VocabParallelEmbedding, ParallelLMHead
 from nanovllm.utils.parallel_state import get_ep_rank, get_ep_size, get_tp_size
+from nanovllm.kernel_plugins import load_kernel_plugin
 
 
 class Qwen3Attention(nn.Module):
@@ -165,6 +166,9 @@ class Qwen3SparseMoeBlock(nn.Module):
         self.enable_ep_profiling = getattr(
             config, "enable_ep_profiling", False
         )
+        self.kernel_plugin = load_kernel_plugin(
+            getattr(config, "moe_kernel_plugin", ""), "qwen3_sparse_moe"
+        )
         self.ep_size = get_ep_size() if self.enable_expert_parallel else 1
         self.ep_rank = get_ep_rank() if self.enable_expert_parallel else 0
         assert self.num_experts % self.ep_size == 0, (
@@ -252,6 +256,8 @@ class Qwen3SparseMoeBlock(nn.Module):
         }
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.kernel_plugin is not None:
+            return self.kernel_plugin.forward(self, hidden_states)
         moe_start = self._profile_mark()
         if self.enable_ep_profiling:
             self._profile_calls += 1

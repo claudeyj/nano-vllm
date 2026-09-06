@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=70.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nanovllm-vllm-a100-moe"
+version = "0.1.0"
+description = "vLLM Triton fused-MoE kernel plugin for nano-vLLM"
+requires-python = ">=3.10,<3.13"
+dependencies = []
+
+[project.entry-points."nanovllm.kernel_plugins"]
+vllm_a100_moe = "nanovllm_vllm_a100_moe:VllmA100MoePlugin"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["nanovllm_vllm_a100_moe*"]

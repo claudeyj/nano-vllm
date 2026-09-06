@@ -15,6 +15,7 @@ class Config:
     enable_expert_parallel: bool = False
     enable_ordered_expert_sum: bool = False
     enable_ep_profiling: bool = False
+    moe_kernel_plugin: str = ""
     enforce_eager: bool = False
     hf_config: AutoConfig | None = None
     eos: int = -1
@@ -37,4 +38,5 @@ class Config:
         self.hf_config.enable_expert_parallel = self.enable_expert_parallel
         self.hf_config.enable_ordered_expert_sum = self.enable_ordered_expert_sum
         self.hf_config.enable_ep_profiling = self.enable_ep_profiling
+        self.hf_config.moe_kernel_plugin = self.moe_kernel_plugin
         self.max_model_len = min(self.max_model_len, self.hf_config.max_position_embeddings)
